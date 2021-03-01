@@ -1,0 +1,327 @@
+NoCli
+
+;vfill routine uses temp mem = byte width of bitmap
+
+Statement asmcls{bmpptr.l}
+  MOVE.l d0,a0            ;address of bitmap in a0
+
+  MOVE.l #256,d7          ;line counter
+
+  xdrw_loop
+
+    MOVEQ  #10,d6         ;long word counter
+
+    xbyte_loop
+
+      MOVE.l #0,(a0)+     ;output byte to bitmap
+      SUBQ #1,d6
+
+    BNE xbyte_loop
+
+    SUBQ #1,d7
+
+  BNE xdrw_loop
+
+  AsmExit
+End Statement
+
+Statement vfill{bmpptr.l,mem.l}
+  MOVE.l d0,a0            ;address of bitmap in a0
+  MOVE.l d1,a1            ;address of temp mem in a1
+
+  MOVEQ  #10,d7           ;40 bytes to clear = 10 long words
+  MOVE.l a1,a2            ;work address
+  clear_mem
+    MOVE.l #0,(a2)+
+    SUB.l #1,d7
+  BNE clear_mem
+
+  MOVE.l #256,d7          ;line counter
+
+  drw_loop
+
+    MOVEQ  #10,d6         ;long word counter
+    MOVE.l a1,a2          ;work address
+
+    byte_loop
+
+      MOVE.l (a0),d1      ;get byte from bitmap
+      MOVE.l (a2),d0      ;get byte from work mem
+      EOR.l d1,d0         ;xor then together
+      MOVE.l d0,(a2)+     ;and store for future use
+
+      MOVE.l d0,(a0)+     ;output byte to bitmap
+      SUBQ #1,d6
+    BNE byte_loop
+
+    SUBQ #1,d7
+
+  BNE drw_loop
+
+  AsmExit
+End Statement
+
+Statement qplt{bplptr.l,slup.l,coord.l,num.l,clup.l,zlup.l}
+;
+; Fast processor plot
+;
+; - no clipping so don't plot outside the bitplane limits
+;
+
+  MOVE.l a6,-(a7)
+  MOVE.l a5,-(a7)   ;preserve Blitz ][ registers
+  MOVE.l a4,-(a7)   ;on stack
+
+  MOVE.l  d0,a0     ;start address of bitplane data
+  MOVE.l  d1,a1     ;start address of sine data
+  MOVE.l  d2,a2     ;start address of coords
+  MOVE.l  d3,a3     ;start address of num coords per line
+  MOVE.l  d4,a5     ;start address of cosine data
+  MOVE.l  d5,a6     ;start address of z data
+
+  MOVE.w #0,d7
+
+  MOVE.l a2,d5
+
+  loop
+
+    MOVE.b (a3),d6  ;num coord this line
+    MOVE.l a2,a4    ;coord pointer storage
+    MOVE.w (a1)+,d3 ;sine for this line
+    MOVE.w (a5)+,d4 ;cosine lup
+
+    count_loop
+
+      MOVE.w (a4)+,d1
+      CMPI #0,d1
+      BEQ no_plot
+
+      MULS d4,d1
+      DIVS #256,d1
+
+      ADD.w  d3,d1      ;add on sine
+      ADD.w #100,d1
+
+      MOVE.w d7,d0      ;x coord
+      ADD.w #40,d0
+
+      MULU    #40,d1               ;40 bytes per line
+
+      MOVE.w  d0,d2                ;copy x value
+      LSR.w   #3,d0                ;x/8  (x even byte value)
+
+      ADD.w   d1,d0                ;offset into bitplane (y*40 + x/8)
+
+      NOT.b   d2                   ;pixel in byte to set
+      BSET.b  d2,0(a0,d0)          ;plot pixel
+
+      SUB.w #1,d6   ;1 coord done
+
+      no_plot
+
+    BNE count_loop
+
+    ADD.l (a6)+,d5      ;make logo ripple
+    MOVE.l d5,d2        ;temp register
+    ASR #3,d2           ;logic shift to get to nearest 8 bytes
+    ASL #3,d2           ;
+    MOVE.l d2,a2        ;put into address register
+
+    ADD.w #1,d7
+    CMP.w #320,d7
+
+  BNE loop
+
+  MOVE.l (a7)+,a4   ;restore registers from
+  MOVE.l (a7)+,a5   ;the stack
+  MOVE.l (a7)+,a6
+
+  AsmExit
+End Statement
+
+DecodeModule 0,?music
+
+BitMap 2,320,256,1
+;LoadBitMap 2,"dh0:data/mojo2.iff"
+DecodeILBM 2,?mojopic
+
+NEWTYPE.coords
+  y1.w
+  y2.w
+  y3.w
+  y4.w
+End NEWTYPE
+
+Dim n.b(640)
+Dim ys.coords(640)
+DEFTYPE.w z
+
+For x.w=0 To 640
+  n(x)=0
+Next x
+
+#xoff=8
+#yoff=0
+
+For x.w=0 To 300
+  z=0
+  For y.w=0 To 127
+    If Point(x,y)=1
+      Select z
+        Case 0
+          ys(x+#xoff)\y1=y-32
+        Case 1
+          ys(x+#xoff)\y2=y-32
+        Case 2
+          ys(x+#xoff)\y3=y-32
+        Case 3
+          ys(x+#xoff)\y4=y-32
+      End Select
+      z+1
+    End If
+  Next y
+  n(x)=z+2
+Next x
+
+BLITZ
+
+res.b=StartTracker(0)
+If res<>True Then End
+
+InitCopList 0,44,255,$10002,8,4,-3
+
+BitMap 0,320,256,2
+BitMap 1,320,256,2
+
+BitPlanesBitMap 0,2,%10
+BitPlanesBitMap 0,3,%01
+BitPlanesBitMap 1,4,%10
+BitPlanesBitMap 1,5,%01
+
+InitPalette 0,3
+AGAPalRGB 0,0,0,0,100
+AGAPalRGB 0,2,255,255,255
+AGAPalRGB 0,1,220,220,220
+AGAPalRGB 0,3,0,220,220
+
+InitPalette 1,3
+AGAPalRGB 1,1,255,255,255
+
+CreateDisplay 0
+DisplayPalette 0,1
+DisplayBitMap 0,0
+
+Use BitMap 0
+
+db.b=0
+
+For i.w=0 To 319 Step 2
+  y.w=128-Abs(Sin(Pi/90*i)*64)
+  Plot i,y,1
+  Plot i+1,y,1
+  Plot i,y+1,1
+  Plot i+1,y+1,1
+  DisplayBitMap 0,db
+  VWait
+  db=1-db
+  Use BitMap db
+  Cls
+  If Joyb(0)<>0 Then End
+Next i
+
+*mybmp0.bitmap=Addr BitMap(0)
+*mybmp1.bitmap=Addr BitMap(1)
+temp0.l=*mybmp0\_data[1]
+temp1.l=*mybmp1\_data[1]
+*mybmp0\_data[1]=*mybmp0\_data[0]
+*mybmp1\_data[1]=*mybmp1\_data[0]
+
+mem.l=AllocMem(40,2)
+If mem.l=0 Then End
+
+Dim s.w(720),c.w(1440),mojo.q(720),zomo.q(720),z.l(1440)
+For i.w=0 To 720
+  s(i)=Sin(Pi/90*i)*15+16
+  mojo(i)=Sin(Pi/90*i)/4
+Next i
+
+For i.w=0 To 1440
+  c(i)=(((Cos(Pi/60*i)*.5)+.75)*128)+128
+  z(i)=Abs(Sin(Pi/90*i))*4+8
+Next i
+
+For i.w=0 To 90
+  z(i+420)-Abs(Sin(Pi/90*i))*4
+  c(i+420)+((Abs(Sin(Pi/90*i)*2))*128)
+Next i
+
+a.w=0
+a2.w=0
+
+DEFTYPE.b ax,ay
+
+ycoord.l=&ys(0)
+ynums.l=&n(0)
+
+fade.w=0
+flag.b=0
+
+PaletteInfo 0
+
+Repeat
+
+  If flag=0
+
+  For col.b=0 To 3
+    r.w=QLimit(AGAPalRed(col),0,fade)
+    g.w=QLimit(AGAPalGreen(col),0,fade)
+    b.w=QLimit(AGAPalBlue(col),0,fade)
+    AGAPalRGB 1,col,r,g,b
+  Next col
+
+  DisplayPalette 0,1
+
+  If fade=255 Then flag=1
+
+  EndIf
+
+  fade=QLimit(fade+8,0,255)
+
+  a=QWrap(a+3,0,360)
+  a2=QWrap(a2+1,0,1080)
+
+  Select db
+    Case 0
+      ptr.l=*mybmp0\_data[0]
+    Case 1
+      ptr.l=*mybmp1\_data[0]
+  End Select
+
+  asmcls{ptr.l}
+
+  qplt{ptr.l,&s(a),ycoord.l,ynums.l,&c(a2),&z(a2)}
+
+  vfill{ptr.l,mem.l}
+
+;  MOVE.w #$fff,$dff180
+
+  DisplayBitMap 0,db
+  VWait
+
+  DisplayScroll 0,&mojo(a),&zomo(0)
+  db=1-db
+  Use BitMap db
+
+Until Joyb(0)<>0
+
+*mybmp0\_data[1]=temp0
+*mybmp1\_data[1]=temp1
+StopTracker
+
+End
+
+music
+IncBin "dh0:data/music/chip/mod.crystal"
+
+mojopic
+IncBin "dh0:data/mojo2.iff"
