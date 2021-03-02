@@ -39,7 +39,10 @@ int decodebb(FILE *fin, FILE *fout)
 			if (token_str != NULL)
 				fprintf(fout, "%s", token_str);
 			else
+			{
 				fprintf(stderr, "Unknown token: 0x%04X\n", token);
+				fprintf(fout, "??%04X??", token);
+			}
 			continue;
 		}
 
