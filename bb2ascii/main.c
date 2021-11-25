@@ -16,9 +16,9 @@ char *find_token(uint16_t token)
 
 int decodebb(FILE *fin, FILE *fout)
 {
-	while (!feof(fin))
+	int b;
+	while ((b = fgetc(fin)) != EOF)
 	{
-		uint8_t b = fgetc(fin);
 		if (b == 0)
 		{
 			fprintf(fout, "\n");
@@ -47,6 +47,12 @@ int decodebb(FILE *fin, FILE *fout)
 		}
 
 		fprintf(stderr, "Unknown character: 0x%02X\b", b);
+	}
+
+	if (ferror(fin))
+	{
+		perror("Read error");
+		return -1;
 	}
 
 	return 0;
