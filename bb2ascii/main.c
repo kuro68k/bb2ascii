@@ -46,7 +46,7 @@ int decodebb(FILE *fin, FILE *fout)
 			continue;
 		}
 
-		fprintf(stderr, "Unknown character: 0x%02X\b", b);
+		fprintf(stderr, "Unknown character: 0x%02X\n", b);
 	}
 
 	if (ferror(fin))
